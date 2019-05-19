@@ -16,6 +16,11 @@ from ttfquery import glyph,describe,ttffiles,glyphquery
 
 epsilon = sys.float_info.epsilon
 
+# introduce scaling option ( in relation to mm)
+# e.g. autocad drawing in micron units -> use 0.001
+scaling = 0.001 # values will be multiplied by 0.001
+
+
 def perpendicular( a ) :
     return numpy.array([a[1],-a[0]])
 
@@ -129,19 +134,19 @@ def check_A_within_B(A,B):
 
 def convert_circle(dict_values,default_thickness,autofill):
     layer   = dict_values[8][0][0]
-    x       = float(dict_values[10][0][0])
-    y       = float(dict_values[20][0][0])
-    r       = float(dict_values[40][0][0])*2
+    x       = float(dict_values[10][0][0])#*scaling
+    y       = float(dict_values[20][0][0])#*scaling
+    r       = float(dict_values[40][0][0])*2*scaling    #keep scaling here?
     device  = "C,%f*"%r if autofill else "C,%fX%f*"%(r,r-default_thickness)
     
     return [{"layer":layer,"device":device,"x":x,"y":y,"style":"D03"}],True
 
 def convert_arc(dict_values,default_thickness):
     layer       = dict_values[8][0][0]
-    center_x    = float(dict_values[10][0][0])
-    center_y    = float(dict_values[20][0][0])
+    center_x    = float(dict_values[10][0][0])#*scaling
+    center_y    = float(dict_values[20][0][0])#*scaling
     thickness   = float(dict_values[39][0][0]) if 39 in dict_values else 0.0
-    radius      = float(dict_values[40][0][0])
+    radius      = float(dict_values[40][0][0])#*scaling
     start_angle = float(dict_values[50][0][0])/180.0*math.pi
     end_angle   = float(dict_values[51][0][0])/180.0*math.pi
     
@@ -164,11 +169,11 @@ def convert_arc(dict_values,default_thickness):
 def convert_ellipse(dict_values,default_thickness,autofill):
     layer           = dict_values[8][0][0]
     thickness       = float(dict_values[39][0][0]) if 39 in dict_values else 0.0
-    center_x        = float(dict_values[10][0][0])
-    center_y        = float(dict_values[20][0][0])
-    major_x         = float(dict_values[11][0][0])
-    major_y         = float(dict_values[21][0][0])
-    minor_to_major  = float(dict_values[40][0][0])
+    center_x        = float(dict_values[10][0][0])#*scaling
+    center_y        = float(dict_values[20][0][0])#*scaling
+    major_x         = float(dict_values[11][0][0])#*scaling
+    major_y         = float(dict_values[21][0][0])#*scaling
+    minor_to_major  = float(dict_values[40][0][0])# axis ratio, no scaling needed here?
     start_angle     = float(dict_values[41][0][0])
     end_angle       = float(dict_values[42][0][0])
 
@@ -198,10 +203,10 @@ def convert_ellipse(dict_values,default_thickness,autofill):
 def convert_line(dict_values,default_thickness):
     layer       = dict_values[8][0][0]
     thickness   = float(dict_values[39][0][0]) if 39 in dict_values else 0.0
-    start_x     = float(dict_values[10][0][0])
-    start_y     = float(dict_values[20][0][0])
-    stop_x      = float(dict_values[11][0][0])
-    stop_y      = float(dict_values[21][0][0])
+    start_x     = float(dict_values[10][0][0])#*scaling
+    start_y     = float(dict_values[20][0][0])#*scaling
+    stop_x      = float(dict_values[11][0][0])#*scaling
+    stop_y      = float(dict_values[21][0][0])#*scaling
     
     device = "C,%f*"%(thickness if thickness else default_thickness)
     return [{"layer":layer,"device":device,"x":start_x,"y":start_y,"style":"D02"},
@@ -217,6 +222,8 @@ def convert_lwpolyline(dict_values,default_thickness,autofill):
     for i in range(count-1,-1,-1):
         x,no_x          = dict_values[10][i]
         y,no_y          = dict_values[20][i]
+        #x*=scaling#
+        #y*=scaling#
         bulge,no_bulge  = copy_bulge.pop() if len(copy_bulge) and copy_bulge[-1][1] > no_x else (None,None)
         points.insert(0,(numpy.array((float(x),float(y))),bulge))
     
@@ -224,7 +231,7 @@ def convert_lwpolyline(dict_values,default_thickness,autofill):
         count += 1
         points.append(points[0])
         
-    if 43 in dict_values:
+    if 43 in dict_values:   #need scaling here?
         v = float(dict_values[43][0][0])
         widths = [(v,v)]*count
     else:
@@ -533,7 +540,7 @@ def convert_text(dict_values, fonts,mtext):
         spacing_fac = float(dict_values[44][0][0]) if 44 in dict_values else 1
                 
     else:
-        boxwidth    = None
+        boxwidth    = 1#None raised error
         x_scale     = float(dict_values[41][0][0]) if 41 in dict_values else 1
         xalign      = float(dict_values[11][0][0]) if 11 in dict_values else None#only used for Horizontal text justification typ == 3
         yalign      = float(dict_values[21][0][0]) if 11 in dict_values else None#only used for Horizontal text justification typ == 3
@@ -552,17 +559,19 @@ def convert_text(dict_values, fonts,mtext):
     charoff     = 0
     lineno      = 1
     lines       = [[]]
-    
         
-    for letter in text:
+    for n, letter in enumerate(text):
         glname  = glyphquery.glyphName(font,letter)
         glwidth = glyphquery.width(font,glname)
         
+        print(glname,glwidth,letter, charoff)
+        
         if letter == "\n" or (boxwidth and charoff + glwidth > boxwidth):
             lines.append(list())
-            charoff         = 0
+            #charoff         = 0 # temprarily deactivated, sets charoff always to 0 else...
             lineno          += 1
-            
+
+        
         if letter != "\n":
             boundaries  = [cheight*10,cheight*10,0,0]
             for c in glyph.Glyph(glname).calculateContours(font):
@@ -575,6 +584,7 @@ def convert_text(dict_values, fonts,mtext):
                     x = org_x * math.cos(rotation) - org_y * math.sin(rotation) + xoffset
                     y = org_x * math.sin(rotation) + org_y * math.cos(rotation) + yoffset
     
+                    # changes polarity -> clear holes in fonts
                     if first and (boundaries[0] < l[0] and l[0] < boundaries[2] and boundaries[1] < l[1] and l[1] < boundaries[3]):
                         lines[-1].pop()#pop the last G36; the gerber file is not read correctly if LPC comes within a G36-G37 Block
                         lines[-1].append({"layer":layer,"command":"%LPC*%"})
@@ -585,11 +595,17 @@ def convert_text(dict_values, fonts,mtext):
                     boundaries[2] = max(boundaries[2],l[0])
                     boundaries[3] = max(boundaries[3],l[1])
                     
+                    #x*=scaling#
+                    #y*=scaling#
+                    
                     lines[-1].append({"layer":layer,"device":"C,0.001*","x":x,"y":y,"style":"D02" if first else "D01"})
                     first = False
                 lines[-1].append({"layer":layer,"command":"G37*"})
             lines[-1].append({"layer":layer,"command":"%LPD*%"})
             charoff += glwidth
+            
+        #print(lines)#
+
 
     #respect the alignment (only affects MTEXT. For TEXT it is already considered
     if mtext:
@@ -650,7 +666,8 @@ def handle_insert(dict_values,default_thickness,autofill,convert,blocks):
         if switch_ccw and "mode" in obj:
             if   obj["mode"] == "G03": obj["mode"] = "G02"
             elif obj["mode"] == "G02": obj["mode"] = "G03"
-        objects.append(obj)                
+        objects.append(obj)         
+    #"""
     return objects,True
 
 #######################################################################
@@ -785,8 +802,8 @@ def convert_dxf2gerber(filename):
                     line = ""
                     
                     if "mode" in obj:   line += obj["mode"]
-                    if "x" in obj:      line += "X"+str(int(obj["x"] * 1000000))
-                    if "y" in obj:      line += "Y"+str(int(obj["y"] * 1000000))
+                    if "x" in obj:      line += "X"+str(int(obj["x"] * 1000000*scaling))    #introduce scaling only here is easier...
+                    if "y" in obj:      line += "Y"+str(int(obj["y"] * 1000000*scaling))
                     if "i" in obj:      line += "I"+str(int(obj["i"] * 1000000))
                     if "j" in obj:      line += "J"+str(int(obj["j"] * 1000000))
                     if "style" in obj:  line += obj["style"]
