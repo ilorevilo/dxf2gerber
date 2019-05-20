@@ -269,13 +269,22 @@ def convert_lwpolyline(dict_values,default_thickness,autofill):
                 start3,end3,start4,end4 = lines[-1][:4]
                 ret1 = intersection(start1,end1,start3,end3)
                 ret2 = intersection(start2,end2,start4,end4)
+
                 
+                if type(ret1) == numpy.ndarray: 
+                    start1 = ret1
+                    lines[-1][1] = ret1
+                if type(ret2) == numpy.ndarray:
+                    start2 = ret2
+                    lines[-1][3] = ret2                
+                """ raises error "The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()"
                 if ret1 != None: 
                     start1 = ret1
                     lines[-1][1] = ret1
                 if ret2 != None: 
                     start2 = ret2
                     lines[-1][3] = ret2
+                """
         else:
             start1      = start
             start2      = start
@@ -529,6 +538,7 @@ def convert_text(dict_values, fonts,mtext):
     height      = float(dict_values[40][0][0])
     rotation    = float(dict_values[50][0][0])/180.0*math.pi if 50 in dict_values else 0
     font        = fonts[dict_values[7][0][0].lower() if 7 in dict_values else "standard"]
+    print("using font", font)
 
     if mtext:
         boxwidth    = float(dict_values[41][0][0]) if 41 in dict_values else 1
@@ -698,12 +708,14 @@ def collect_by_commands(filename):
     return commands
 
 def convert_dxf2gerber(filename):
-    autofill = len(sys.argv) >= 3 and sys.argv[2] == "autofill"
+    #autofill = len(sys.argv) >= 3 and sys.argv[2] == "autofill"
+    autofill = True #always use autofill so far...
     print "INFO: converting",filename, " with autofill ", "enabled" if autofill else "disabled"
     commands = collect_by_commands(filename)#"2010-01-07 Maske v2.dxf")#
     layers  = dict()
     blocks  = dict()
     fonts   = dict()
+    fonts["standard"] = load_font("arial.ttf",True) # will raise error otherwise...
     
     #workaround for polylines
     open_poly = None
@@ -778,8 +790,11 @@ def convert_dxf2gerber(filename):
             
     #write gerber
     for l,objects in layers.items():
+        
         devices = {obj["device"]:None for obj in objects if "device" in obj}
-        with open(l+".gbr","w") as file:
+        # use filename as outputname
+        with open(filename[:-4]+".gbr","w") as file:
+        #with open(l+".gbr","w") as file:
             file.write("%FSLAX36Y36*%\n")
             file.write("%MOMM*%\n")
             file.write("%LN"+ l + "*%\n")
